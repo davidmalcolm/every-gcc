@@ -106,6 +106,14 @@ class Tests(unittest.TestCase):
 class App(cmdln.Cmdln):
     name = 'every-gcc'
 
+    def do_list(self, subcmd, opts, *args):
+        """
+        List all configurations, on stdout.
+        """
+        cfgs = Config.get_all()
+        for cfg in cfgs:
+            print(cfg.s)
+
     def do_shell(self, subcmd, opts, *args):
         """
         Run a shell command on every configuration
