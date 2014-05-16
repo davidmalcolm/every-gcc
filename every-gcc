@@ -1,0 +1,130 @@
+#!/usr/bin/python
+"""
+Script for managing the build of GCC across all of its many configurations
+(currently 204) of them.
+"""
+
+from multiprocessing.dummy import Pool as ThreadPool
+from subprocess import Popen, PIPE
+import sys
+import unittest
+
+import cmdln  # in Fedora as "python-cmdln"
+
+# config-list.mk has LIST, giving 204 configurations
+
+# with Makefile rule:
+#   print-%:
+#	@echo '$*=$($*)'
+#
+# make print-LIST -f config-list.mk
+
+LIST='aarch64-elf aarch64-linux-gnu alpha-linux-gnu alpha-freebsd6 alpha-netbsd alpha-openbsd alpha64-dec-vms alpha-dec-vms am33_2.0-linux arc-elf32OPT-with-cpu=arc600 arc-elf32OPT-with-cpu=arc700 arc-linux-uclibcOPT-with-cpu=arc700 arceb-linux-uclibcOPT-with-cpu=arc700 arm-wrs-vxworks arm-netbsdelf arm-linux-androideabi arm-uclinux_eabi arm-eabi arm-symbianelf avr-rtems avr-elf bfin-elf bfin-uclinux bfin-linux-uclibc bfin-rtems bfin-openbsd c6x-elf c6x-uclinux cr16-elf cris-elf cris-linux crisv32-elf crisv32-linux epiphany-elf epiphany-elfOPT-with-stack-offset=16 fido-elf fr30-elf frv-elf frv-linux h8300-elf h8300-rtems hppa-linux-gnu hppa-linux-gnuOPT-enable-sjlj-exceptions=yes hppa64-linux-gnu hppa2.0-hpux10.1 hppa64-hpux11.3 hppa64-hpux11.0OPT-enable-sjlj-exceptions=yes hppa2.0-hpux11.9 i686-pc-linux-gnu i686-apple-darwin i686-apple-darwin9 i686-apple-darwin10 i486-freebsd4 i686-freebsd6 i686-kfreebsd-gnu i686-netbsdelf9 i686-knetbsd-gnu i686-openbsd i686-openbsd3.0 i686-elf i686-kopensolaris-gnu i686-symbolics-gnu i686-pc-msdosdjgpp i686-lynxos i686-nto-qnx i686-rtems i686-solaris2.10 i686-wrs-vxworks i686-wrs-vxworksae i686-cygwinOPT-enable-threads=yes i686-mingw32crt ia64-elf ia64-freebsd6 ia64-linux ia64-hpux ia64-hp-vms iq2000-elf lm32-elf lm32-rtems lm32-uclinux m32c-rtems m32c-elf m32r-elf m32rle-elf m32r-rtems m32r-linux m32rle-linux m68k-elf m68k-netbsdelf m68k-openbsd m68k-uclinux m68k-linux m68k-rtems mcore-elf mep-elf microblaze-linux microblaze-elf mips-netbsd mips64el-st-linux-gnu mips64octeon-linux mipsisa64r2-linux mipsisa32r2-linux-gnu mipsisa64r2-sde-elf mipsisa32-elfoabi mipsisa64-elfoabi mipsisa64r2el-elf mipsisa64sr71k-elf mipsisa64sb1-elf mipsel-elf mips64-elf mips64vr-elf mips64orion-elf mips-rtems mips-wrs-vxworks mipstx39-elf mmix-knuth-mmixware mn10300-elf moxie-elf moxie-uclinux moxie-rtems pdp11-aout picochip-elfOPT-enable-obsolete msp430-elf nds32le-elf nds32be-elf powerpc-darwin8 powerpc-darwin7 powerpc64-darwin powerpc-freebsd6 powerpc-netbsd powerpc-eabispe powerpc-eabisimaltivec powerpc-eabisim ppc-elf powerpc-eabialtivec powerpc-xilinx-eabi powerpc-eabi powerpc-rtems4.11OPT-enable-threads=yes powerpc-linux_spe powerpc-linux_paired powerpc64-linux_altivec powerpc-wrs-vxworks powerpc-wrs-vxworksae powerpc-lynxos powerpcle-elf powerpcle-eabisim powerpcle-eabi rs6000-ibm-aix4.3 rs6000-ibm-aix5.1.0 rs6000-ibm-aix5.2.0 rs6000-ibm-aix5.3.0 rs6000-ibm-aix6.0 rl78-elf rx-elf s390-linux-gnu s390x-linux-gnu s390x-ibm-tpf sh-elf shle-linux sh-netbsdelf sh-superh-elf sh5el-netbsd sh64-netbsd sh64-linux sh64-elfOPT-with-newlib sh-rtems sh-wrs-vxworks sparc-elf sparc-leon-elf sparc-rtems sparc-linux-gnu sparc-leon3-linux-gnuOPT-enable-target=all sparc-netbsdelf sparc64-sun-solaris2.10OPT-with-gnu-ldOPT-with-gnu-asOPT-enable-threads=posix sparc-wrs-vxworks sparc64-elf sparc64-rtems sparc64-linux sparc64-freebsd6 sparc64-netbsd sparc64-openbsd spu-elf tilegx-linux-gnu tilepro-linux-gnu v850e-elf v850-elf vax-linux-gnu vax-netbsdelf vax-openbsd x86_64-apple-darwin x86_64-pc-linux-gnuOPT-with-fpmath=avx x86_64-elfOPT-with-fpmath=sse x86_64-freebsd6 x86_64-netbsd x86_64-knetbsd-gnu x86_64-w64-mingw32 x86_64-mingw32OPT-enable-sjlj-exceptions=yes xstormy16-elf xtensa-elf xtensa-linux sparc-sun-solaris2.9OPT-enable-obsolete i686-solaris2.9OPT-enable-obsolete i686-interix3OPT-enable-obsolete score-elfOPT-enable-obsolete'.split()
+#print(LIST)
+#print(len(LIST))
+
+class Config:
+    def __init__(self, s):
+        self.s = s
+
+    def __repr__(self):
+        return 'Config(%r)' % self.s
+
+    def __eq__(self, other):
+        return self.s == other.s
+
+    def __hash__(self):
+        return hash(self.s)
+
+    def get_options(self):
+        return '--target=%s' % (self.s.replace('OPT', ' -'))
+
+    @staticmethod
+    def get_all():
+        return [Config(s) for s in LIST]
+
+class Task:
+    def do_one_cfg(self, cfg):
+        raise NotImplementedError('%r (on %r)' % (self, cfg))
+
+    def reduce(self, accum, single_result):
+        pass
+
+class SubprocessTask(Task):
+    def __init__(self, cmd):
+        self.cmd = cmd
+        self.successes = 0
+        self.failures = 0
+
+    def do_one_cfg(self, cfg):
+        cmd = self.cmd.replace('%CONFIG', cfg.s)
+        cmd = cmd.replace('%OPTIONS', cfg.get_options())
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+        out, err = p.communicate()
+        for line in out.splitlines():
+            sys.stdout.write('%s [%s]\n' % (line, cfg.s))
+        for line in err.splitlines():
+            sys.stderr.write('%s [%s]\n' % (line, cfg.s))
+        return cfg, p.returncode
+
+    def accumulate(self, individual_result):
+        cfg, returncode = individual_result
+        if returncode == 0:
+            self.successes += 1
+        else:
+            self.failures += 1
+
+def for_each(configs, task):
+    # We use multiprocessing.dummy.ThreadPool since multiprocessing.Pool
+    # is stymied by pickle's inability to pickle instance methods (or
+    # lambdas or nested functions for that matter).
+    pool = ThreadPool(None) # uses cpu_count
+    for individual_result in pool.map(task.do_one_cfg, configs):
+        task.accumulate(individual_result)
+
+class Tests(unittest.TestCase):
+    def test_config_without_opts(self):
+        cfg = Config('sparc-rtems')
+        self.assertEqual(cfg.get_options(),
+                         '--target=sparc-rtems')
+    def test_config_with_opts(self):
+        cfg = Config('sparc64-sun-solaris2.10OPT-with-gnu-ldOPT-with-gnu-asOPT-enable-threads=posix')
+        self.assertEqual(cfg.get_options(),
+                         '--target=sparc64-sun-solaris2.10 --with-gnu-ld --with-gnu-as --enable-threads=posix')
+
+    def test_get_all(self):
+        cfgs = Config.get_all()
+        self.assertEqual(len(cfgs), 204)
+        self.assertEqual(cfgs[0], Config('aarch64-elf'))
+
+    def test_for_each(self):
+        cfgs = Config.get_all()
+        task = SubprocessTask('') # do nothing
+        for_each(cfgs, task)
+        self.assertEqual(task.failures, 0)
+
+class App(cmdln.Cmdln):
+    name = 'every-gcc'
+
+    def do_shell(self, subcmd, opts, *args):
+        """
+        Run a shell command on every configuration
+
+        %CONFIG is substituted to the name of the config
+        %OPTIONS is set to the config's specific configuration options
+        """
+        #print(subcmd, opts, args)
+        cfgs = Config.get_all()
+        task = SubprocessTask(' '.join(args))
+        for_each(cfgs, task)
+        print('%i success(es); %i failure(s)' % (task.successes, task.failures))
+
+    def do_unittests(self, subcmd, opts, *args):
+        """Run every-gcc's own unit tests"""
+        #print(subcmd, opts, args)
+        sys.argv = [sys.argv[0]] + list(args)
+        unittest.main()
+
+if __name__ == "__main__":
+    app = App()
+    sys.exit(app.main())
